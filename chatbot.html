@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URO-CARE Chat Widget</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Outfit', sans-serif;
+  /* Demo background so the widget is visible on its own */
+  background: #f0f4f8;
+  min-height: 100vh;
+}
+
+/* ─── DEMO LABEL (remove when embedding) ─── */
+.demo-label {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0A1F44;
+  color: rgba(255,255,255,0.7);
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  padding: 8px 20px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+/* ════════════════════════════════════════
+   WHATSAPP FLOATING BUTTON
+════════════════════════════════════════ */
+.float-wa {
+  position: fixed;
+  bottom: 100px;
+  right: 28px;
+  width: 54px;
+  height: 54px;
+  background: #25D366;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(37,211,102,0.45);
+  z-index: 900;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  animation: waPulse 3s ease-in-out 3s infinite;
+}
+.float-wa:hover {
+  transform: scale(1.12);
+  box-shadow: 0 8px 30px rgba(37,211,102,0.6);
+}
+.float-wa svg { width: 28px; height: 28px; }
+.float-wa-tooltip {
+  position: absolute;
+  right: 64px;
+  background: #1a1a2a;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'Outfit', sans-serif;
+  padding: 6px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.float-wa-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: #1a1a2a;
+}
+.float-wa:hover .float-wa-tooltip { opacity: 1; }
+
+@keyframes waPulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(37,211,102,0.45); }
+  50%       { box-shadow: 0 4px 32px rgba(37,211,102,0.7), 0 0 0 8px rgba(37,211,102,0.12); }
+}
+
+/* ════════════════════════════════════════
+   CHAT FAB BUTTON
+════════════════════════════════════════ */
+.chat-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 54px;
+  height: 54px;
+  background: linear-gradient(135deg, #0A1F44 0%, #1B5FA8 60%, #3A8FCA 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(26,95,168,0.5);
+  z-index: 901;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  user-select: none;
+}
+.chat-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 8px 32px rgba(26,95,168,0.6);
+}
+.chat-fab-icon { display: flex; align-items: center; justify-content: center; }
+.chat-fab-icon svg { width: 24px; height: 24px; }
+
+.chat-fab-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 20px;
+  height: 20px;
+  background: #e53935;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Outfit', sans-serif;
+  border: 2px solid white;
+  opacity: 0;
+  transform: scale(0.4);
+  animation: badgePop 0.5s cubic-bezier(0.34,1.56,0.64,1) 3s forwards;
+}
+@keyframes badgePop { to { opacity: 1; transform: scale(1); } }
+
+/* ════════════════════════════════════════
+   CHAT WINDOW
+════════════════════════════════════════ */
+.chat-window {
+  position: fixed;
+  bottom: 96px;
+  right: 28px;
+  width: 360px;
+  max-height: 530px;
+  background: white;
+  border-radius: 18px;
+  box-shadow:
+    0 24px 64px rgba(10,31,68,0.22),
+    0 4px 16px rgba(10,31,68,0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 902;
+  overflow: hidden;
+  transform: scale(0.88) translateY(24px);
+  transform-origin: bottom right;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.38s cubic-bezier(0.34,1.56,0.64,1);
+  font-family: 'Outfit', sans-serif;
+}
+.chat-window.open {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ── Header ── */
+.chat-header {
+  background: linear-gradient(135deg, #0A1F44 0%, #1B5FA8 100%);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.chat-header-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-header-info { flex: 1; min-width: 0; }
+.chat-header-name  { color: white; font-weight: 700; font-size: 14px; }
+.chat-header-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255,255,255,0.72);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background: #4ade80;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: sdPulse 2s ease-in-out infinite;
+}
+@keyframes sdPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.chat-header-close {
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.chat-header-close:hover { background: rgba(255,255,255,0.24); }
+.chat-header-close svg { width: 14px; height: 14px; }
+
+/* ── Messages ── */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #F8F4EF;
+  scroll-behavior: smooth;
+}
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+.chat-msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  animation: msgIn 0.28s ease;
+}
+@keyframes msgIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+.chat-msg.bot  { flex-direction: row; }
+.chat-msg.user { flex-direction: row-reverse; }
+
+.chat-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0A1F44, #1B5FA8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.5px;
+}
+.chat-bubble {
+  max-width: 76%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.chat-msg.bot  .chat-bubble {
+  background: white;
+  color: #1A1A2A;
+  border-bottom-left-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.chat-msg.user .chat-bubble {
+  background: linear-gradient(135deg, #1B5FA8, #3A8FCA);
+  color: white;
+  border-bottom-right-radius: 3px;
+}
+.chat-time { font-size: 10px; color: #9CA3AF; padding: 2px 4px; }
+.chat-msg.user .chat-time { text-align: right; }
+
+/* ── Typing indicator ── */
+.typing-bubble {
+  background: white;
+  border-radius: 14px;
+  border-bottom-left-radius: 3px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.t-dot {
+  width: 7px;
+  height: 7px;
+  background: #9CA3AF;
+  border-radius: 50%;
+  animation: tBounce 1.2s ease-in-out infinite;
+}
+.t-dot:nth-child(2) { animation-delay: 0.2s; }
+.t-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes tBounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+/* ── Quick replies ── */
+.chat-quick-replies {
+  padding: 8px 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: white;
+  border-top: 1px solid #F0EEE9;
+  flex-shrink: 0;
+}
+.qr-btn {
+  background: #EEF4FC;
+  color: #1B5FA8;
+  border: 1.5px solid #C8DDF5;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Outfit', sans-serif;
+  white-space: nowrap;
+}
+.qr-btn:hover { background: #1B5FA8; color: white; border-color: #1B5FA8; }
+
+/* ── Input row ── */
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: white;
+  border-top: 1px solid #E5DDD4;
+  flex-shrink: 0;
+  align-items: center;
+}
+.chat-input {
+  flex: 1;
+  border: 1.5px solid #E5DDD4;
+  border-radius: 22px;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-family: 'Outfit', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+  color: #1A1A2A;
+  background: #FDFBF8;
+}
+.chat-input:focus { border-color: #3A8FCA; }
+.chat-send-btn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #1B5FA8, #3A8FCA);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.chat-send-btn:hover { transform: scale(1.08); box-shadow: 0 4px 14px rgba(26,95,168,0.35); }
+.chat-send-btn svg { width: 16px; height: 16px; }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .chat-window  { width: calc(100vw - 20px); right: 10px; bottom: 88px; max-height: 70vh; }
+  .float-wa     { right: 14px; bottom: 90px; }
+  .chat-fab     { right: 14px; bottom: 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Demo label — remove when embedding -->
+<div class="demo-label">URO-CARE Chat Widget — standalone preview</div>
+
+<!-- ════════════════════════════════════════
+     WHATSAPP FLOATING BUTTON
+════════════════════════════════════════ -->
+<a href="https://wa.me/254112288709"
+   class="float-wa"
+   target="_blank"
+   rel="noopener"
+   aria-label="Chat on WhatsApp">
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path fill="white" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+  <span class="float-wa-tooltip">Chat on WhatsApp</span>
+</a>
+
+<!-- ════════════════════════════════════════
+     CHAT FAB BUTTON
+════════════════════════════════════════ -->
+<div id="chat-fab"
+     class="chat-fab"
+     onclick="toggleChat()"
+     aria-label="Open chat"
+     role="button"
+     tabindex="0">
+  <!-- Open icon -->
+  <div class="chat-fab-icon chat-fab-open">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </div>
+  <!-- Close icon (hidden by default) -->
+  <div class="chat-fab-icon chat-fab-close" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+      <line x1="18" y1="6"  x2="6"  y2="18"/>
+      <line x1="6"  y1="6"  x2="18" y2="18"/>
+    </svg>
+  </div>
+  <!-- Notification badge -->
+  <div class="chat-fab-badge" id="chatBadge">1</div>
+</div>
+
+<!-- ════════════════════════════════════════
+     CHAT WINDOW
+════════════════════════════════════════ -->
+<div id="chat-window" class="chat-window" role="dialog" aria-label="URO-CARE Chat">
+
+  <!-- Header -->
+  <div class="chat-header">
+    <div class="chat-header-avatar">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"
+           style="width:30px;height:30px">
+        <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.15)"/>
+        <path d="M20 8C13.4 8 8 13.4 8 20s5.4 12 12 12 12-5.4 12-12S26.6 8 20 8zm0 5c2.2 0 4 1.8 4 4s-1.8 4-4 4-4-1.8-4-4 1.8-4 4-4zm0 17c-3 0-5.7-1.5-7.4-3.8.1-2.4 4.9-3.7 7.4-3.7 2.5 0 7.3 1.3 7.4 3.7C25.7 28.5 23 30 20 30z"
+              fill="white"/>
+      </svg>
+    </div>
+    <div class="chat-header-info">
+      <div class="chat-header-name">URO-CARE Assistant</div>
+      <div class="chat-header-status">
+        <span class="status-dot"></span>Online — typically replies instantly
+      </div>
+    </div>
+    <button class="chat-header-close" onclick="toggleChat()" aria-label="Close chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white"
+           stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6"  x2="6"  y2="18"/>
+        <line x1="6"  y1="6"  x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Messages area -->
+  <div class="chat-messages" id="chatMessages"></div>
+
+  <!-- Quick reply chips -->
+  <div class="chat-quick-replies" id="quickReplies">
+    <button class="qr-btn"
+            onclick="sendQuickReply('Tell me about kidney stone treatment')">
+      Kidney Stones
+    </button>
+    <button class="qr-btn"
+            onclick="sendQuickReply('I need prostate health information')">
+      Prostate Health
+    </button>
+    <button class="qr-btn"
+            onclick="sendQuickReply('How do I book an appointment?')">
+      Book Appointment
+    </button>
+    <button class="qr-btn"
+            onclick="sendQuickReply('I have a question about men\'s sexual health')">
+      Men's Health
+    </button>
+  </div>
+
+  <!-- Input row -->
+  <div class="chat-input-row">
+    <input type="text"
+           id="chatInput"
+           class="chat-input"
+           placeholder="Type your message…"
+           onkeydown="if(event.key==='Enter') sendMessage()"
+           maxlength="500"/>
+    <button class="chat-send-btn" onclick="sendMessage()" aria-label="Send message">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2"  x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+
+</div><!-- /chat-window -->
+
+<!-- ════════════════════════════════════════
+     CHAT JAVASCRIPT
+════════════════════════════════════════ -->
+<script>
+(function () {
+  /* ── State ── */
+  let chatOpen  = false;
+  let chatReady = false;
+  let history   = [];
+
+  /* ── Claude system prompt ── */
+  const SYSTEM = `You are a warm and professional patient care assistant for URO-CARE, Nairobi's premier Urology and Andrology Center.
+
+Location: 4th Floor, PMC Building, 3rd Parklands Avenue, Nairobi, Kenya
+Phone: +254 112 288 709
+Email: info@urocare.co.ke
+Hours: Monday–Friday 9:00am–5:00pm | Saturday 10:00am–3:00pm
+
+Services:
+- Kidney stones (ESWL, ureteroscopy, PCNL)
+- Prostate health (BPH, prostatitis, prostate cancer screening — PSA from age 40)
+- Men's sexual health: erectile dysfunction (shockwave therapy, PRP, penile implants, pelvic floor rehab), low testosterone, male infertility
+- Bladder disorders (overactive bladder, urinary incontinence, bladder cancer)
+- Urological surgery (laparoscopic / keyhole)
+- Paediatric urology (undescended testes, hypospadias, congenital conditions)
+- Female urology
+
+In-house facilities: Laboratory (PSA, semen analysis, hormone panels, kidney function, urine culture, FBC, STI screening — most results in 1–3 hrs), Pharmacy (same-visit prescriptions, discreet packaging).
+
+Key facts:
+- No referral required. Self-referrals welcome.
+- All consultations 100% confidential.
+- Same-week specialist appointments available.
+- First consultation: 45–60 minutes.
+- Accepted insurance: Allianz Care, Africa Medilink, Heritage (Liberty), Bupa, Optimum Global, Madison Insurance.
+- Fellowship-trained urologists and andrologists.
+
+Guidelines:
+- Keep replies concise (2–4 sentences), warm and professional.
+- Never provide a medical diagnosis.
+- Always encourage the patient to call or visit for personalised care.
+- End each reply with a helpful follow-up question or a clear call to action (e.g. "Would you like to book an appointment?" or "Call us on +254 112 288 709").`;
+
+  /* ── Helpers ── */
+  function now() {
+    return new Date().toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function scrollBottom() {
+    const m = document.getElementById('chatMessages');
+    if (m) m.scrollTop = m.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function hideQuickReplies() {
+    const qr = document.getElementById('quickReplies');
+    if (!qr) return;
+    qr.style.transition = 'opacity 0.2s';
+    qr.style.opacity = '0';
+    setTimeout(() => (qr.style.display = 'none'), 200);
+  }
+
+  /* ── DOM helpers ── */
+  function addTyping() {
+    const m  = document.getElementById('chatMessages');
+    const el = document.createElement('div');
+    el.className = 'chat-msg bot';
+    el.id = 'typing-indicator';
+    el.innerHTML = `
+      <div class="chat-msg-avatar">UC</div>
+      <div class="typing-bubble">
+        <div class="t-dot"></div>
+        <div class="t-dot"></div>
+        <div class="t-dot"></div>
+      </div>`;
+    m.appendChild(el);
+    scrollBottom();
+    return el;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById('typing-indicator');
+    if (t) t.remove();
+  }
+
+  function addBot(text) {
+    const m  = document.getElementById('chatMessages');
+    const el = document.createElement('div');
+    el.className = 'chat-msg bot';
+    el.innerHTML = `
+      <div class="chat-msg-avatar">UC</div>
+      <div>
+        <div class="chat-bubble">${text}</div>
+        <div class="chat-time">${now()}</div>
+      </div>`;
+    m.appendChild(el);
+    scrollBottom();
+  }
+
+  function addUser(text) {
+    const m  = document.getElementById('chatMessages');
+    const el = document.createElement('div');
+    el.className = 'chat-msg user';
+    el.innerHTML = `
+      <div>
+        <div class="chat-bubble">${escHtml(text)}</div>
+        <div class="chat-time">${now()}</div>
+      </div>`;
+    m.appendChild(el);
+    scrollBottom();
+  }
+
+  /* ── API call ── */
+  async function callClaude(userText) {
+    history.push({ role: 'user', content: userText });
+    addTyping();
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: SYSTEM,
+          messages: history
+        })
+      });
+
+      const data = await res.json();
+      removeTyping();
+
+      const reply =
+        data.content && data.content[0] && data.content[0].text
+          ? data.content[0].text
+          : "Thank you for reaching out! For personalised guidance, please call us on <strong>+254 112 288 709</strong> or WhatsApp us — our team is happy to assist.";
+
+      addBot(reply);
+      history.push({ role: 'assistant', content: reply });
+
+    } catch (e) {
+      removeTyping();
+      addBot("I'm experiencing a brief technical issue. Please call us directly on <strong>+254 112 288 709</strong> or WhatsApp us — we're ready to help!");
+    }
+  }
+
+  /* ── Start chat ── */
+  function startChat() {
+    const m = document.getElementById('chatMessages');
+    if (m) m.innerHTML = '';
+    history = [];
+    addTyping();
+
+    setTimeout(() => {
+      removeTyping();
+      const welcomeHtml =
+        "Welcome to <strong>URO-CARE</strong>! 👋 I'm your virtual patient care assistant. How can URO-CARE help you today? Whether it's kidney stones, prostate health, men's sexual health, or any urological concern — I'm here to guide you in the right direction.";
+      const welcomeText =
+        "Welcome to URO-CARE! I'm your virtual patient care assistant. How can URO-CARE help you today? Whether it's kidney stones, prostate health, men's sexual health, or any urological concern — I'm here to guide you in the right direction.";
+      addBot(welcomeHtml);
+      history.push({ role: 'assistant', content: welcomeText });
+    }, 1400);
+  }
+
+  /* ── Toggle window ── */
+  window.toggleChat = function () {
+    chatOpen = !chatOpen;
+
+    const win      = document.getElementById('chat-window');
+    const fabOpen  = document.querySelector('.chat-fab-open');
+    const fabClose = document.querySelector('.chat-fab-close');
+    const badge    = document.getElementById('chatBadge');
+
+    if (chatOpen) {
+      win.classList.add('open');
+      fabOpen.style.display  = 'none';
+      fabClose.style.display = 'flex';
+      if (badge) badge.style.display = 'none';
+      if (!chatReady) { chatReady = true; startChat(); }
+      setTimeout(() => {
+        const inp = document.getElementById('chatInput');
+        if (inp) inp.focus();
+      }, 400);
+    } else {
+      win.classList.remove('open');
+      fabOpen.style.display  = 'flex';
+      fabClose.style.display = 'none';
+    }
+  };
+
+  /* ── Send helpers (exposed globally for onclick) ── */
+  window.sendMessage = function () {
+    const inp  = document.getElementById('chatInput');
+    const text = (inp && inp.value) ? inp.value.trim() : '';
+    if (!text) return;
+    inp.value = '';
+    hideQuickReplies();
+    addUser(text);
+    callClaude(text);
+  };
+
+  window.sendQuickReply = function (text) {
+    hideQuickReplies();
+    addUser(text);
+    callClaude(text);
+  };
+
+  /* ── Show badge after 3 s if chat is still closed ── */
+  setTimeout(() => {
+    if (!chatOpen) {
+      const badge = document.getElementById('chatBadge');
+      if (badge) {
+        badge.style.opacity   = '1';
+        badge.style.transform = 'scale(1)';
+      }
+    }
+  }, 3000);
+
+})();
+</script>
+
+</body>
+</html>
