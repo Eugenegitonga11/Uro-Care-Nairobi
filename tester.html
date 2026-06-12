@@ -1407,13 +1407,102 @@ function toggleFaq(el) {
 
 <!-- ══ CHAT JAVASCRIPT ══ -->
 <!-- ══ CHAT JAVASCRIPT — connects to Render RAG server ══ -->
+<!-- ══ CHAT WIDGET STYLES — booking form ══ -->
+<style>
+.booking-form-wrap {
+  background: #f0f7ff;
+  border: 1.5px solid #C8DDF5;
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 10px;
+  font-family: 'Outfit', sans-serif;
+}
+.booking-form-wrap .bf-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0A1F44;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.booking-form-wrap input {
+  width: 100%;
+  border: 1.5px solid #C8DDF5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: 'Outfit', sans-serif;
+  color: #1A1A2A;
+  background: white;
+  outline: none;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.booking-form-wrap input:focus { border-color: #1B5FA8; }
+.booking-form-wrap input::placeholder { color: #9CA3AF; }
+.bf-submit {
+  width: 100%;
+  background: #25D366;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+.bf-submit:hover { background: #1DA851; }
+.bf-submit:disabled { background: #9CA3AF; cursor: not-allowed; }
+.bf-error {
+  font-size: 11.5px;
+  color: #e53935;
+  margin-top: -4px;
+  margin-bottom: 6px;
+  display: none;
+}
+.bf-success {
+  text-align: center;
+  padding: 10px;
+  font-size: 13px;
+  color: #0F6E56;
+  font-weight: 600;
+}
+</style>
+
+<!-- ══ CHAT JAVASCRIPT — with booking form + session persistence ══ -->
 <script>
 (function(){
-  var chatOpen=false, chatReady=false, isBusy=false, history=[];
+  var chatOpen  = false;
+  var chatReady = false;
+  var isBusy    = false;
 
-  /* ── IMPORTANT: Replace with your actual Render URL ── */
+  /* ── Replace with your actual Render URL ── */
   var API_URL = 'https://uro-care-chatbot.onrender.com';
 
+  /* ── WhatsApp number ── */
+  var WA_NUMBER = '254112268709';
+
+  /* ── Session storage keys ── */
+  var STORAGE_HISTORY  = 'urocare_chat_history';
+  var STORAGE_MESSAGES = 'urocare_chat_messages';
+  var STORAGE_OPEN     = 'urocare_chat_open';
+
+  /* ── Load history from session ── */
+  var history = [];
+  try {
+    var saved = sessionStorage.getItem(STORAGE_HISTORY);
+    if (saved) history = JSON.parse(saved);
+  } catch(e){ history = []; }
+
+  /* ── Helpers ── */
   function el(id){ return document.getElementById(id); }
   function now(){ return new Date().toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'}); }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1436,7 +1525,17 @@ function toggleFaq(el) {
     q.style.transition='opacity 0.2s'; q.style.opacity='0';
     setTimeout(function(){ q.style.display='none'; },200);
   }
+  function saveHistory(){
+    try { sessionStorage.setItem(STORAGE_HISTORY, JSON.stringify(history)); } catch(e){}
+  }
+  function saveMessages(){
+    try {
+      var m=el('chatMessages');
+      if(m) sessionStorage.setItem(STORAGE_MESSAGES, m.innerHTML);
+    } catch(e){}
+  }
 
+  /* ── Typing indicator ── */
   function addTyping(){
     var m=el('chatMessages'), e=document.createElement('div');
     e.className='chat-msg bot'; e.id='typing-indicator';
@@ -1445,21 +1544,102 @@ function toggleFaq(el) {
   }
   function removeTyping(){ var t=el('typing-indicator'); if(t) t.remove(); }
 
+  /* ── User message ── */
   function addUser(text){
     var m=el('chatMessages'), e=document.createElement('div');
     e.className='chat-msg user';
     e.innerHTML='<div><div class="chat-bubble">'+esc(text)+'</div><div class="chat-time">'+now()+'</div></div>';
-    m.appendChild(e); scrollBottom();
+    m.appendChild(e); scrollBottom(); saveMessages();
   }
 
-  function addBot(html, sources){
-    sources = Array.isArray(sources) ? sources : [];
+  /* ── Bot message ── */
+  function addBot(html, sources, showForm){
+    sources  = Array.isArray(sources) ? sources : [];
+    showForm = showForm === true;
+
+    var formHtml = '';
+    if(showForm){
+      var fid = 'bf_' + Date.now();
+      formHtml = '<div class="booking-form-wrap" id="'+fid+'">'
+        + '<div class="bf-title">📅 Quick Appointment Request</div>'
+        + '<input type="text"   id="'+fid+'_name"  placeholder="Your full name" />'
+        + '<div class="bf-error" id="'+fid+'_err_name">Please enter your name</div>'
+        + '<input type="tel"    id="'+fid+'_phone" placeholder="Your WhatsApp number e.g. 07XXXXXXXX" />'
+        + '<div class="bf-error" id="'+fid+'_err_phone">Please enter a valid number</div>'
+        + '<button class="bf-submit" id="'+fid+'_btn" onclick="submitBooking(\''+fid+'\')">'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>'
+        + ' Send via WhatsApp</button>'
+        + '</div>';
+    }
+
     var m=el('chatMessages'), e=document.createElement('div');
     e.className='chat-msg bot';
-    e.innerHTML='<div class="chat-msg-avatar">UC</div><div><div class="chat-bubble">'+html+'</div><div class="chat-time">'+now()+'</div></div>';
-    m.appendChild(e); scrollBottom();
+    e.innerHTML='<div class="chat-msg-avatar">UC</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div class="chat-bubble">'+html+'</div>'
+      +'<div class="chat-time">'+now()+'</div>'
+      + formHtml
+      +'</div>';
+    m.appendChild(e); scrollBottom(); saveMessages();
   }
 
+  /* ── Submit booking form → open WhatsApp ── */
+  window.submitBooking = function(fid){
+    var nameEl  = el(fid+'_name');
+    var phoneEl = el(fid+'_phone');
+    var errName = el(fid+'_err_name');
+    var errPhone= el(fid+'_err_phone');
+    var btn     = el(fid+'_btn');
+
+    var name  = nameEl  ? nameEl.value.trim()  : '';
+    var phone = phoneEl ? phoneEl.value.trim() : '';
+
+    /* Reset errors */
+    if(errName)  errName.style.display  = 'none';
+    if(errPhone) errPhone.style.display = 'none';
+
+    /* Validate */
+    var valid = true;
+    if(!name){
+      if(errName) errName.style.display = 'block';
+      valid = false;
+    }
+    if(!phone || phone.length < 9){
+      if(errPhone) errPhone.style.display = 'block';
+      valid = false;
+    }
+    if(!valid) return;
+
+    /* Disable button */
+    if(btn){ btn.disabled = true; btn.textContent = 'Opening WhatsApp…'; }
+
+    /* Build WhatsApp message */
+    var msg = 'Hi URO-CARE 👋\n\n'
+      + 'I would like to book an appointment.\n\n'
+      + '👤 Name: ' + name + '\n'
+      + '📱 WhatsApp: ' + phone + '\n\n'
+      + 'Please confirm your availability. Thank you!';
+
+    var waUrl = 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(msg);
+
+    /* Open WhatsApp */
+    window.open(waUrl, '_blank');
+
+    /* Show success in form */
+    var formWrap = el(fid);
+    if(formWrap){
+      formWrap.innerHTML = '<div class="bf-success">'
+        + '✅ WhatsApp opened! Just tap <strong>Send</strong> to confirm your request.'
+        + '</div>';
+    }
+
+    /* Add confirmation to chat history */
+    history.push({role:'user', content:'I want to book an appointment. My name is '+name+' and my WhatsApp is '+phone});
+    saveHistory();
+    saveMessages();
+  };
+
+  /* ── Fetch chat from server ── */
   function fetchChat(userText){
     setBusy(true); addTyping();
     fetch(API_URL+'/chat',{
@@ -1470,14 +1650,16 @@ function toggleFaq(el) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       removeTyping();
-      var reply = d.reply || 'Sorry, I could not get a response. Please call +254 112 288 709.';
-      addBot(fmt(reply), d.sources||[]);
-      history.push({role:'user', content:userText});
+      var reply     = d.reply     || 'Sorry, I could not get a response. Please call +254 112 288 709.';
+      var showForm  = d.show_booking_form === true;
+      addBot(fmt(reply), d.sources||[], showForm);
+      history.push({role:'user',      content:userText});
       history.push({role:'assistant', content:reply});
+      saveHistory();
     })
     .catch(function(){
       removeTyping();
-      addBot('I\'m having a technical issue. Please call us on <strong>+254 112 288 709</strong> — we\'re ready to help!',[]);
+      addBot('I\'m having a technical issue. Please call us on <strong>+254 112 288 709</strong>.',[],false);
     })
     .finally(function(){
       setBusy(false);
@@ -1485,51 +1667,110 @@ function toggleFaq(el) {
     });
   }
 
+  /* ── Restore previous session ── */
+  function restoreSession(){
+    try {
+      var savedMsgs = sessionStorage.getItem(STORAGE_MESSAGES);
+      var m = el('chatMessages');
+      if(savedMsgs && m && history.length > 0){
+        m.innerHTML = savedMsgs;
+        var divider = document.createElement('div');
+        divider.style.cssText='text-align:center;font-size:11px;color:#9CA3AF;padding:4px 0;margin:4px 0;';
+        divider.textContent = '— continuing your conversation —';
+        m.appendChild(divider);
+        scrollBottom();
+        hideQR();
+        return true;
+      }
+    } catch(e){}
+    return false;
+  }
+
+  /* ── Start fresh chat ── */
   function startChat(){
     var m=el('chatMessages'); if(m) m.innerHTML='';
-    history=[]; addTyping();
+    history=[]; saveHistory(); saveMessages();
+    addTyping();
     setTimeout(function(){
       removeTyping();
-      addBot('Welcome to <strong>URO-CARE</strong>! 👋 I\'m your AI patient care assistant.<br><br>I can answer questions about our services, lab tests, pharmacy, insurance, appointments and more. How can I help you today?',[]);
+      addBot(
+        'Welcome to <strong>URO-CARE</strong>! 👋 I\'m your AI patient care assistant.<br><br>'
+        +'I can answer questions about our services, lab tests, pharmacy, insurance and appointments. How can I help you today?',
+        [], false
+      );
       history.push({role:'assistant', content:'Welcome to URO-CARE! How can I help you today?'});
+      saveHistory();
     },1400);
   }
 
-  window.toggleChat=function(){
-    chatOpen=!chatOpen;
-    var win=el('chat-window');
-    var fabOpen=document.querySelector('.chat-fab-open');
-    var fabClose=document.querySelector('.chat-fab-close');
-    var badge=el('chatBadge');
+  /* ── Toggle chat ── */
+  window.toggleChat = function(){
+    chatOpen = !chatOpen;
+    var win     = el('chat-window');
+    var fabOpen = document.querySelector('.chat-fab-open');
+    var fabClose= document.querySelector('.chat-fab-close');
+    var badge   = el('chatBadge');
     if(chatOpen){
       win.classList.add('open');
-      if(fabOpen) fabOpen.style.display='none';
-      if(fabClose) fabClose.style.display='flex';
-      if(badge) badge.style.display='none';
-      if(!chatReady){ chatReady=true; startChat(); }
+      if(fabOpen)  fabOpen.style.display  = 'none';
+      if(fabClose) fabClose.style.display = 'flex';
+      if(badge)    badge.style.display    = 'none';
+      if(!chatReady){
+        chatReady = true;
+        var restored = restoreSession();
+        if(!restored) startChat();
+      }
+      try { sessionStorage.setItem(STORAGE_OPEN,'1'); } catch(e){}
       setTimeout(function(){ var i=el('chatInput'); if(i) i.focus(); },400);
     } else {
       win.classList.remove('open');
-      if(fabOpen) fabOpen.style.display='flex';
-      if(fabClose) fabClose.style.display='none';
+      if(fabOpen)  fabOpen.style.display  = 'flex';
+      if(fabClose) fabClose.style.display = 'none';
+      try { sessionStorage.removeItem(STORAGE_OPEN); } catch(e){}
     }
   };
 
-  window.sendMessage=function(){
+  /* ── Send message ── */
+  window.sendMessage = function(){
     if(isBusy) return;
     var i=el('chatInput'), text=i?i.value.trim():'';
     if(!text) return;
     i.value=''; hideQR(); addUser(text); fetchChat(text);
   };
 
-  window.sendQuickReply=function(text){
+  /* ── Quick reply ── */
+  window.sendQuickReply = function(text){
     if(isBusy) return;
     hideQR(); addUser(text); fetchChat(text);
   };
 
-  /* Badge pop after 3s */
+  /* ── Clear chat ── */
+  window.clearChat = function(){
+    try {
+      sessionStorage.removeItem(STORAGE_HISTORY);
+      sessionStorage.removeItem(STORAGE_MESSAGES);
+    } catch(e){}
+    chatReady = false;
+    var m=el('chatMessages'); if(m) m.innerHTML='';
+    history=[];
+    startChat();
+    var q=el('quickReplies');
+    if(q){ q.style.display='flex'; q.style.opacity='1'; }
+  };
+
+  /* ── Auto-open if was open on previous page ── */
+  try {
+    if(sessionStorage.getItem(STORAGE_OPEN)==='1'){
+      setTimeout(function(){ window.toggleChat(); },600);
+    }
+  } catch(e){}
+
+  /* ── Badge pop ── */
   setTimeout(function(){
-    if(!chatOpen){ var b=el('chatBadge'); if(b){b.style.opacity='1';b.style.transform='scale(1)';} }
+    if(!chatOpen){
+      var b=el('chatBadge');
+      if(b){ b.style.opacity='1'; b.style.transform='scale(1)'; }
+    }
   },3000);
 
 })();
